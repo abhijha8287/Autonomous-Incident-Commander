@@ -1,31 +1,60 @@
 # Autonomous Incident Commander
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
-[![Node 18+](https://img.shields.io/badge/node-18+-green.svg)](https://nodejs.org/)
+When an alert fires, this agent searches the logs, builds an incident timeline, finds the likely root cause with a confidence score and writes an executive PDF report.
 
-> **Splunk Agentic Ops Hackathon submission**
+## Why this exists
+Submission for the Splunk Agentic Ops Hackathon. Engineers often spend 30-90 minutes per incident on mechanical work: searching logs across services, lining up timestamps, finding what failed first and writing the report. Most AI tools answer questions when asked; this one runs the investigation itself.
 
-AI-powered incident response that **autonomously investigates, analyzes, and reports** — no human in the loop.
+## What it does
+- Investigation agent queries Splunk as a tool through MCP, or a built-in log simulator when Splunk is not available
+- Timeline agent orders events across services and classifies severity
+- Root-cause agent (Claude) explains what failed first, with a confidence score and evidence, streamed to the UI
+- Report agent writes a downloadable PDF: summary, timeline, root cause, evidence and prioritised fixes
+- Single dashboard streams logs, agent reasoning and timeline live (server-sent events)
+- Ships with a demo incident: database connection-pool exhaustion cascading across 5 services
 
-When an alert fires, the platform queries Splunk MCP, builds an incident timeline, identifies the root cause with a confidence score, and delivers an executive-ready PDF report — all without a human typing a single query.
+## Project structure
+```
+Autonomous-Incident-Commander/
+├── backend/
+│   ├── agents/           Orchestrator, investigation, timeline, root cause, report
+│   ├── splunk/           Splunk MCP client
+│   ├── simulator/        Demo log generator
+│   ├── reports/          PDF report builder
+│   ├── main.py           FastAPI app and SSE stream
+│   ├── models.py         Database models
+│   ├── database.py       SQLite setup
+│   └── config.py         Settings
+├── frontend/src/         React dashboard
+├── architecture_diagram.md  System diagram
+├── demo.md               Demo script
+├── Makefile              Install and run shortcuts
+└── requirements.txt      Python dependencies
+```
 
----
+## Getting started
+Requirements: Python 3.11+, Node.js 18+, an Anthropic API key.
+```bash
+git clone https://github.com/abhijha8287/Autonomous-Incident-Commander.git
+cd Autonomous-Incident-Commander
+cp .env.example .env                     # set ANTHROPIC_API_KEY, keep SPLUNK_MODE=simulator
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cd frontend && npm install && cd ..
+python -m uvicorn backend.main:app --reload --port 8000    # terminal 1
+cd frontend && npm run dev                                  # terminal 2, http://localhost:5173
+```
+Or use `make install` and `make dev`.
 
-## The Problem
+## Configuration
+| Variable | Purpose |
+|:--|:--|
+| `ANTHROPIC_API_KEY` | Claude API key (required) |
+| `SPLUNK_MODE` | `simulator` (default) or `live` |
+| `SPLUNK_HOST`, `SPLUNK_PORT`, `SPLUNK_USERNAME`, `SPLUNK_PASSWORD` | Only for `SPLUNK_MODE=live` |
 
-Modern SRE teams spend **30–90 minutes per incident** on tasks that are mechanical:
-
-- Searching logs across services
-- Correlating timestamps to build a timeline
-- Identifying what failed first and why
-- Writing up an incident report for leadership
-
-Existing AI tools (Splunk AI Assistant, Datadog Bits AI, Dynatrace Davis) are **copilots** — they answer questions when asked. They don't act.
-
-**Autonomous Incident Commander acts.**
-
----
+## Tech stack
+Python, FastAPI, Anthropic Claude API, MCP, SQLAlchemy, SQLite, ReportLab, React, TypeScript, Vite, Tailwind CSS
 
 ## Architecture
 
@@ -64,156 +93,6 @@ FastAPI Backend (Python + asyncio)
       ├─ Splunk MCP Server (stdio) → Splunk Enterprise
       └─ Anthropic API (claude-sonnet-4-6, streaming)
 ```
-
----
-
-## Features
-
-- **Live Incident Theater** — single-screen dashboard where logs, AI reasoning, and timeline all stream simultaneously in real time
-- **Splunk MCP Integration** — Investigation Agent calls Splunk as a tool via the MCP protocol; transparent fallback to the built-in log simulator
-- **Root Cause Analysis with confidence scoring** — genuine LLM output, not hardcoded; streams token-by-token in the UI (typewriter effect)
-- **Auto-generated incident timeline** — chronological event ordering with severity classification across all affected services
-- **Executive PDF report** — incident summary, timeline table, root cause, evidence, prioritized remediation; downloadable at end of investigation
-- **Pre-seeded demo scenario** — Database Connection Pool Exhaustion cascade (24 realistic log events, 5 services, 8-minute incident window)
-
----
-
-## Requirements
-
-### System
-
-| Dependency | Version | Notes |
-|---|---|---|
-| Python | 3.11+ | Backend runtime |
-| Node.js | 18+ | Frontend build |
-| npm | 9+ | Frontend package manager |
-
-### Python packages (auto-installed via `requirements.txt`)
-
-| Package | Purpose |
-|---|---|
-| `fastapi` | REST API + SSE streaming |
-| `uvicorn[standard]` | ASGI server |
-| `sqlalchemy` | ORM (SQLite) |
-| `anthropic` | LLM API client (claude-sonnet-4-6) |
-| `mcp` | Splunk MCP Server client |
-| `reportlab` | PDF generation |
-| `python-dotenv` | Environment variable loading |
-| `pydantic` | Agent data contracts / schema validation |
-| `aiofiles` | Async file I/O |
-
-### API Keys
-
-| Key | Required | Where to get |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | **Yes** | [console.anthropic.com](https://console.anthropic.com) |
-| Splunk credentials | Optional | Only needed for `SPLUNK_MODE=live` |
-
----
-
-## Setup & Run
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/abhijha8287/Autonomous-Incident-Commander.git
-cd Autonomous-Incident-Commander
-```
-
-### 2. Configure environment
-
-```bash
-cp .env.example .env
-```
-
-Open `.env` and set your Anthropic API key:
-
-```env
-ANTHROPIC_API_KEY=sk-ant-api03-...
-```
-
-Leave `SPLUNK_MODE=simulator` for the demo — no Splunk Enterprise required.
-
-### 3. Install backend dependencies
-
-```bash
-# Create and activate virtual environment
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-
-# macOS / Linux
-source venv/bin/activate
-
-# Install packages
-pip install -r requirements.txt
-```
-
-### 4. Install frontend dependencies
-
-```bash
-cd frontend
-npm install
-cd ..
-```
-
-### 5. Run
-
-Open **two terminals**:
-
-**Terminal 1 — Backend:**
-```bash
-# From project root, with venv activated
-python -m uvicorn backend.main:app --reload --port 8000
-```
-
-**Terminal 2 — Frontend:**
-```bash
-cd frontend
-npm run dev
-```
-
-Open **http://localhost:5173**
-
----
-
-## Example Configuration
-
-### `.env` — Development (simulator mode, no Splunk required)
-
-```env
-ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
-SPLUNK_HOST=localhost
-SPLUNK_PORT=8089
-SPLUNK_USERNAME=admin
-SPLUNK_PASSWORD=
-SPLUNK_MODE=simulator
-```
-
-### `.env` — Production (live Splunk Enterprise)
-
-```env
-ANTHROPIC_API_KEY=sk-ant-api03-your-key-here
-SPLUNK_HOST=your-splunk-host.company.com
-SPLUNK_PORT=8089
-SPLUNK_USERNAME=admin
-SPLUNK_PASSWORD=your-splunk-password
-SPLUNK_MODE=live
-```
-
-### Environment Variable Reference
-
-| Variable | Default | Required | Description |
-|---|---|---|---|
-| `ANTHROPIC_API_KEY` | — | **Yes** | Anthropic API key for claude-sonnet-4-6 |
-| `SPLUNK_MODE` | `simulator` | No | `simulator` = built-in logs \| `live` = real Splunk |
-| `SPLUNK_HOST` | `localhost` | If live | Splunk Enterprise hostname |
-| `SPLUNK_PORT` | `8089` | If live | Splunk management port |
-| `SPLUNK_USERNAME` | `admin` | If live | Splunk username |
-| `SPLUNK_PASSWORD` | — | If live | Splunk password |
-
----
 
 ## Connecting to Splunk Enterprise
 
@@ -260,8 +139,6 @@ asyncio.run(check())
 
 Update `backend/splunk/mcp_client.py` line with `call_tool(...)` if the tool name differs from `"search"`.
 
----
-
 ## Running the Demo Scenario
 
 The platform pre-seeds a **Database Connection Pool Exhaustion** incident on startup. See [`demo.md`](./demo.md) for the full 4-minute demo script.
@@ -282,54 +159,6 @@ curl -X POST http://localhost:8000/api/incidents/trigger \
   -d '{"service": "checkout-service", "title": "Critical Error Rate — checkout-service"}'
 ```
 
----
-
-## Project Structure
-
-```
-Autonomous-Incident-Commander/
-├── backend/
-│   ├── main.py                    # FastAPI app, all API endpoints, SSE stream
-│   ├── config.py                  # Environment variable loading
-│   ├── database.py                # SQLite connection + schema init
-│   ├── models.py                  # SQLAlchemy ORM models
-│   ├── agents/
-│   │   ├── schemas.py             # Pydantic models — shared agent data contracts
-│   │   ├── orchestrator.py        # Sequential pipeline, asyncio.Queue handoff
-│   │   ├── investigation.py       # Agent 1: Splunk MCP log collection
-│   │   ├── timeline.py            # Agent 2: chronological event ordering
-│   │   ├── root_cause.py          # Agent 3: LLM root cause analysis (streaming)
-│   │   └── report.py              # Agent 4: synthesis + PDF trigger
-│   ├── splunk/
-│   │   └── mcp_client.py          # Splunk MCP wrapper + simulator fallback
-│   ├── simulator/
-│   │   └── log_generator.py       # 24-event DB connection pool exhaustion scenario
-│   └── reports/
-│       └── pdf_generator.py       # ReportLab PDF: summary, timeline, RCA, remediation
-├── frontend/
-│   └── src/
-│       ├── App.tsx                # Router
-│       ├── pages/
-│       │   ├── Dashboard.tsx      # Incident list + trigger button
-│       │   └── Investigation.tsx  # Live Incident Theater (the wow screen)
-│       ├── components/
-│       │   ├── LiveLogPanel.tsx   # Left: streaming log events
-│       │   ├── AIPanel.tsx        # Center: AI reasoning + root cause card
-│       │   ├── TimelinePanel.tsx  # Right: building incident timeline
-│       │   └── ReportPanel.tsx    # Bottom bar: PDF download
-│       └── hooks/
-│           └── useIncidentStream.ts  # EventSource SSE state management
-├── architecture_diagram.md        # System architecture + sequence diagrams
-├── demo.md                        # 4-minute demo script for judges
-├── requirements.txt               # Python dependencies
-├── .env.example                   # Environment variable template
-├── Makefile                       # Dev shortcuts
-├── LICENSE                        # MIT License
-└── README.md
-```
-
----
-
 ## API Reference
 
 | Method | Endpoint | Description |
@@ -342,8 +171,6 @@ Autonomous-Incident-Commander/
 | `GET` | `/api/investigate/{id}/results` | Final structured results (JSON) |
 | `GET` | `/api/reports/{id}/pdf` | Download PDF report |
 | `GET` | `/docs` | Interactive API docs (Swagger UI) |
-
----
 
 ## Demo Scenario — DB Connection Pool Exhaustion
 
@@ -364,8 +191,6 @@ The built-in simulator generates a realistic 8-minute cascade failure:
 ```
 
 The AI analyzes these 24 events and correctly identifies **Database Connection Pool Exhaustion** as the root cause, with evidence citations and prioritized remediation steps.
-
----
 
 ## License
 
